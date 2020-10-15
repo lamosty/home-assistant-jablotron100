@@ -201,6 +201,7 @@ class Jablotron():
 		self._state_checker_thread_pool_executor: Optional[ThreadPoolExecutor] = None
 		self._state_checker_stop_event: threading.Event = threading.Event()
 		self._state_checker_data_updating_event: threading.Event = threading.Event()
+		self._read_stream = None
 
 		self.states: Dict[str, str] = {}
 		self.last_update_success: bool = False
@@ -445,7 +446,7 @@ class Jablotron():
 			self.states[device_problem_sensor_id] = STATE_OFF
 
 	def _read_packets(self) -> None:
-		stream = open(self._config[CONF_SERIAL_PORT], "rb")
+		self._restart_read_stream()
 
 		while not self._state_checker_stop_event.is_set():
 
@@ -455,7 +456,7 @@ class Jablotron():
 
 					self._state_checker_data_updating_event.clear()
 
-					packet = stream.read(PACKET_READ_SIZE)
+					packet = self._read_stream.read(PACKET_READ_SIZE)
 					# LOGGER.debug(str(binascii.hexlify(packet), "utf-8"))
 
 					self._state_checker_data_updating_event.set()
@@ -488,14 +489,18 @@ class Jablotron():
 
 			time.sleep(0.5)
 
-		stream.close()
+		self._read_stream.close()
 
-	def _keepalive(self):
+	def _keepalive(self) -> None:
 		counter = 0
 		while not self._state_checker_stop_event.is_set():
+			if counter == 3600:
+				self._restart_read_stream()
+				counter = 0
+
 			if not self._state_checker_data_updating_event.wait(0.5):
 				try:
-					if counter == 0:
+					if counter % 60 == 0:
 						self._send_packet(self._create_code_packet(self._config[CONF_PASSWORD]) + b"\x52\x02\x13\x05\x9a")
 					else:
 						self._send_packet(b"\x52\x01\x02")
@@ -504,8 +509,12 @@ class Jablotron():
 
 			time.sleep(1)
 			counter += 1
-			if counter == 60:
-				counter = 0
+
+	def _restart_read_stream(self) -> None:
+		if self._read_stream is not None:
+			self._read_stream.close()
+
+		self._read_stream = open(self._config[CONF_SERIAL_PORT], "rb")
 
 	def _send_packet(self, packet) -> None:
 		stream = open(self._config[CONF_SERIAL_PORT], "wb")
