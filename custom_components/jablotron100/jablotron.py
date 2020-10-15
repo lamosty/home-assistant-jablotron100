@@ -501,7 +501,18 @@ class Jablotron():
 			if not self._state_checker_data_updating_event.wait(0.5):
 				try:
 					if counter % 60 == 0:
-						self._send_packet(self._create_code_packet(self._config[CONF_PASSWORD]) + b"\x52\x02\x13\x05\x9a")
+						alarm_is_triggered = False
+
+						for alarm_control_panel in self._alarm_control_panels:
+							section_alarm_id = Jablotron._create_section_alarm_id(alarm_control_panel.section)
+
+							if self.states[section_alarm_id] == STATE_ALARM_TRIGGERED:
+								alarm_is_triggered = True
+								break
+
+						if alarm_is_triggered is False:
+							self._send_packet(self._create_code_packet(self._config[CONF_PASSWORD]) + b"\x52\x02\x13\x05\x9a")
+
 					else:
 						self._send_packet(b"\x52\x01\x02")
 				except Exception as ex:
